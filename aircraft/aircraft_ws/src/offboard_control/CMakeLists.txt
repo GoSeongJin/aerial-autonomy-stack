@@ -21,7 +21,12 @@ find_package(vision_msgs REQUIRED)
 set(CMAKE_MODULE_PATH "/usr/share/cmake/geographiclib" ${CMAKE_MODULE_PATH})
 find_package(GeographicLib REQUIRED)
 
-add_executable(px4_offboard src/px4_offboard.cpp)
+# PX4 Offboard 제어기 및 충돌 회피 알고리즘 빌드 추가 2026 10 19
+add_executable(px4_offboard
+    src/px4_offboard.cpp
+    src/collision_avoidance.cpp
+)
+
 target_link_libraries(px4_offboard ${GeographicLib_LIBRARIES})
 ament_target_dependencies(px4_offboard 
                           rclcpp
