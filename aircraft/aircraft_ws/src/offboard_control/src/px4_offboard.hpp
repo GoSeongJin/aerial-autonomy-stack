@@ -44,6 +44,9 @@
 #include "ground_system_msgs/msg/swarm_obs.hpp"
 #include "vision_msgs/msg/detection2_d_array.hpp"
 
+// 충돌회피 추
+#include "collision_avoidance.hpp"
+
 using namespace px4_msgs::msg;
 using namespace GeographicLib;
 using namespace std::chrono_literals; // For time literals (e.g. 1s)
@@ -139,14 +142,31 @@ private:
     void yolo_detections_callback(const vision_msgs::msg::Detection2DArray::SharedPtr msg);
     void kiss_odometry_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
-    // Controller map and controllers
+    // ============================================================
+    // 1. Offboard 제어기 관리
+    // ============================================================
+    
+    // 제어기 이름과 실제 실행 함수를 연결
     using ControllerFunction = std::function<void(OffboardControlMode&)>;
+    
     std::unordered_map<std::string, ControllerFunction> controller_map_;
     ControllerFunction active_controller_func_;
+    
+    // 기존 제어기
     void att_ref_test(OffboardControlMode& mode);
     void ctbr_ref_test(OffboardControlMode& mode);
     void traj_ref_test(OffboardControlMode& mode);
     void traj_ref_predictive_rendezvous(OffboardControlMode& mode);
+    
+    // ============================================================
+    // 2. 충돌 회피 제어기
+    // ============================================================
+    
+    // 충돌 회피 알고리즘 객체
+    CollisionAvoidance collision_avoidance_;
+    
+    // CBF 기반 충돌 회피 제어 함수
+    void formation_cbf_controller(OffboardControlMode& mode);
 };
 
 #endif // OFFBOARD_CONTROL__PX4_OFFBOARD_HPP_
