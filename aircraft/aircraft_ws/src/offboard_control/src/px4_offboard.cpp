@@ -110,6 +110,13 @@ PX4Offboard::PX4Offboard() : Node("px4_offboard"),
     controller_map_["traj-test"] = std::bind(&PX4Offboard::traj_ref_test, this, std::placeholders::_1);
     // Custom controllers
     controller_map_["traj-prv"] = std::bind(&PX4Offboard::traj_ref_predictive_rendezvous, this, std::placeholders::_1);
+    // 신규 CBF 기반 편대 충돌 회피 제어기
+    controller_map_["formation-cbf"] =
+        std::bind(
+            &PX4Offboard::formation_cbf_controller,
+            this,
+            std::placeholders::_1
+        );
 }
 
 // Callbacks for subscribers (reentrant group)
@@ -466,6 +473,71 @@ void PX4Offboard::traj_ref_predictive_rendezvous(OffboardControlMode& mode)
         trajectory_ref.velocity = {0.0, 0.0, 0.0};
         trajectory_ref.yawspeed = 0.0;
     }
+    trajectory_ref_pub_->publish(trajectory_ref);
+}
+
+// ============================================================
+// CBF 기반 편대 충돌 회피 제어기 - 연결 시험용
+// ============================================================
+// 현재는 알고리즘 연결을 위한 기본 구조
+// 아직 주변 드론 정보와 편대 목표 속도를 연결하지 않음
+// ============================================================
+
+void PX4Offboard::formation_cbf_controller(
+    OffboardControlMode& mode)
+{
+    // 위치·속도 추정값이 유효하지 않으면 명령을 생성하지 않음
+    if (!xy_valid_ || !z_valid_ ||
+        !v_xy_valid_ || !v_z_valid_) {
+        RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "Waiting for valid PX4 position and velocity"
+        );
+        return;
+    }
+
+    // 1. 자신의 현재 상태
+    DroneState own_state{
+        x_, y_, z_,
+        vx_, vy_, vz_
+    };
+
+    // 2. 주변 드론 상태
+    // TODO: /tracks 데이터를 동일한 NED 좌표계로 변환
+    std::vector<DroneState> neighbors;
+
+    // 3. 기본 편대 목표 속도
+    // TODO: 편대 제어기에서 계산한 목표 속도를 연결
+    Velocity3D desired_velocity{0.0, 0.0, 0.0};
+
+    // 4. 충돌 회피 알고리즘 호출
+    Velocity3D safe_velocity =
+        collision_avoidance_.compute_safe_velocity(
+            own_state,
+            neighbors,
+            desired_velocity
+        );
+
+    // 5. PX4에 속도 목표값 전달
+    mode.velocity = true;
+
+    TrajectorySetpoint trajectory_ref{};
+    trajectory_ref.timestamp = mode.timestamp;
+
+    // 위치 목표값은 사용하지 않고 속도로 제어
+    trajectory_ref.position = {NAN, NAN, NAN};
+
+    trajectory_ref.velocity = {
+        static_cast<float>(safe_velocity.vx),
+        static_cast<float>(safe_velocity.vy),
+        static_cast<float>(safe_velocity.vz)
+    };
+
+    trajectory_ref.acceleration = {NAN, NAN, NAN};
+    trajectory_ref.jerk = {NAN, NAN, NAN};
+    trajectory_ref.yaw = NAN;
+    trajectory_ref.yawspeed = NAN;
+
     trajectory_ref_pub_->publish(trajectory_ref);
 }
 
